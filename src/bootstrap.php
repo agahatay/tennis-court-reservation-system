@@ -22,6 +22,7 @@ require_once BASE_PATH . '/src/repositories/customers.php';
 require_once BASE_PATH . '/src/repositories/time-slots.php';
 require_once BASE_PATH . '/src/repositories/reservations.php';
 require_once BASE_PATH . '/src/repositories/statistics.php';
+require_once BASE_PATH . '/src/repositories/login-attempts.php';
 require_once BASE_PATH . '/src/auth.php';
 require_once BASE_PATH . '/src/reservation-service.php';
 

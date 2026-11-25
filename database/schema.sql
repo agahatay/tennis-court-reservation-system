@@ -18,13 +18,18 @@ CREATE TABLE courts (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE customers (
-    customer_id INT          NOT NULL AUTO_INCREMENT,
-    name        VARCHAR(50)  NOT NULL,
-    phone       VARCHAR(20)  NOT NULL,
+    customer_id      INT          NOT NULL AUTO_INCREMENT,
+    name             VARCHAR(50)  NOT NULL,
+    -- Phone number exactly as the customer entered it (for display).
+    phone            VARCHAR(20)  NOT NULL,
+    -- E.164 form used for matching and search, e.g. "+905321234567", so that
+    -- "0532...", "532..." and "+90532..." are the same number.
+    phone_normalized VARCHAR(20)  NOT NULL,
     PRIMARY KEY (customer_id),
-    -- Not UNIQUE on purpose: existing data contains duplicate phone numbers and
-    -- the business rule (one customer per phone?) is still under review.
-    KEY idx_customers_phone (phone)
+    -- Not UNIQUE on purpose: different people (e.g. family members) may share
+    -- a phone number. A booking reuses a customer only when both the
+    -- normalized phone and the name match.
+    KEY idx_customers_phone_normalized_name (phone_normalized, name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Bookable hourly slots, managed from the admin panel (admin/time-slots.php).
@@ -68,4 +73,16 @@ CREATE TABLE admins (
     last_login_at DATETIME     NULL,
     PRIMARY KEY (admin_id),
     UNIQUE KEY uq_admins_username (username)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Failed admin sign-in attempts, used to rate-limit the login form.
+-- Rows older than one day are deleted automatically.
+CREATE TABLE login_attempts (
+    login_attempt_id BIGINT      NOT NULL AUTO_INCREMENT,
+    ip_address       VARCHAR(45) NOT NULL,
+    username_hash    CHAR(64)    NOT NULL,   -- SHA-256 of the lower-cased username
+    attempted_at     DATETIME    NOT NULL,
+    PRIMARY KEY (login_attempt_id),
+    KEY idx_login_attempts_ip_time (ip_address, attempted_at),
+    KEY idx_login_attempts_ip_user_time (ip_address, username_hash, attempted_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

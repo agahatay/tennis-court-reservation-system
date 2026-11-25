@@ -77,6 +77,17 @@ FROM customers
 GROUP BY phone
 HAVING COUNT(*) > 1;
 
+SELECT '[INFO] Phone numbers that do not fit any Turkish / international format (kept as entered; will not match new bookings)' AS check_name;
+SELECT customer_id, phone
+FROM customers
+WHERE NOT (
+       TRIM(phone) LIKE '+%'
+    OR REGEXP_REPLACE(phone, '[^0-9]', '') LIKE '00%'
+    OR (CHAR_LENGTH(REGEXP_REPLACE(phone, '[^0-9]', '')) = 11 AND REGEXP_REPLACE(phone, '[^0-9]', '') LIKE '0%')
+    OR (CHAR_LENGTH(REGEXP_REPLACE(phone, '[^0-9]', '')) = 10 AND REGEXP_REPLACE(phone, '[^0-9]', '') NOT LIKE '0%')
+    OR (CHAR_LENGTH(REGEXP_REPLACE(phone, '[^0-9]', '')) = 12 AND REGEXP_REPLACE(phone, '[^0-9]', '') LIKE '90%')
+);
+
 SELECT '[INFO] Customers whose phone numbers differ only by formatting (e.g. leading 0, spaces)' AS check_name;
 SELECT RIGHT(REGEXP_REPLACE(phone, '[^0-9]', ''), 10) AS last_10_digits,
        COUNT(*) AS customers,

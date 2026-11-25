@@ -28,6 +28,22 @@ function get_booked_time_slot_ids(int $courtId, string $reservationDate): array
 }
 
 /**
+ * Booked time slots of every court on a date, in one query.
+ *
+ * @return array<int, list<int>> court id => booked time slot ids
+ */
+function get_booked_time_slot_ids_by_court(string $reservationDate): array
+{
+    $bookedByCourt = [];
+    $rows = db_fetch_all('SELECT court_id, time_slot_id FROM reservations WHERE reservation_date = ?', [$reservationDate]);
+    foreach ($rows as $row) {
+        $bookedByCourt[(int) $row['court_id']][] = (int) $row['time_slot_id'];
+    }
+
+    return $bookedByCourt;
+}
+
+/**
  * Inserts a reservation. Throws mysqli_sql_exception with code
  * DB_ERROR_DUPLICATE_ENTRY if the court is already booked for that slot.
  */
@@ -65,8 +81,19 @@ function search_reservations(array $filters, string $direction = 'asc'): array
     if ($search !== '') {
         // Escape LIKE wildcards so "%" or "_" in the search box are matched literally.
         $pattern = '%' . addcslashes($search, '%_\\') . '%';
-        $conditions[] = '(cu.name LIKE ? OR cu.phone LIKE ?)';
+        $searchConditions = ['cu.name LIKE ?', 'cu.phone LIKE ?'];
         array_push($params, $pattern, $pattern);
+
+        // A search that looks like (part of) a phone number also matches the
+        // normalized number, so "0532 123", "532123" and "+90532123" all find
+        // a customer stored as "+90 532 123 45 67".
+        $phoneDigits = phone_search_digits($search);
+        if ($phoneDigits !== null) {
+            $searchConditions[] = 'cu.phone_normalized LIKE ?';
+            $params[] = '%' . $phoneDigits . '%';
+        }
+
+        $conditions[] = '(' . implode(' OR ', $searchConditions) . ')';
     }
 
     $date = $filters['date'] ?? '';

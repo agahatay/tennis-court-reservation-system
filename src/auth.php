@@ -17,6 +17,50 @@ const ADMIN_SESSION_KEY = 'admin';
  */
 const DUMMY_PASSWORD_HASH = '$2y$10$P1FxiRBr8qW6f/nEFXn2Q./r7Ixsy4KnnuNxP3ume6VJEF2/Mf0oS';
 
+/*
+ * Login rate limiting (sliding window). Within LOGIN_THROTTLE_WINDOW_SECONDS:
+ *   - at most LOGIN_MAX_FAILURES_PER_USERNAME failures for one username from one IP
+ *   - at most LOGIN_MAX_FAILURES_PER_IP failures from one IP across all usernames
+ * Further attempts are refused until the oldest counted failure leaves the
+ * window. Limits are per IP on purpose: an account-wide lock would let anyone
+ * lock the real administrator out. A successful login clears that username's
+ * failures for the IP.
+ */
+const LOGIN_THROTTLE_WINDOW_SECONDS = 900;
+const LOGIN_MAX_FAILURES_PER_USERNAME = 5;
+const LOGIN_MAX_FAILURES_PER_IP = 20;
+
+/**
+ * The client address used for rate limiting. REMOTE_ADDR is used deliberately:
+ * headers such as X-Forwarded-For are set by the client and could be forged
+ * to bypass the limit. Behind a reverse proxy this must be adapted.
+ */
+function client_ip_address(): string
+{
+    return substr((string) ($_SERVER['REMOTE_ADDR'] ?? 'unknown'), 0, 45);
+}
+
+/** Seconds until the next sign-in attempt is allowed (0 = allowed now). */
+function login_lockout_seconds_remaining(string $ipAddress, string $username, DateTimeImmutable $now): int
+{
+    $windowStart = $now->modify('-' . LOGIN_THROTTLE_WINDOW_SECONDS . ' seconds');
+    $remaining = 0;
+
+    $limits = [
+        [$username, LOGIN_MAX_FAILURES_PER_USERNAME],
+        [null, LOGIN_MAX_FAILURES_PER_IP],
+    ];
+    foreach ($limits as [$scopeUsername, $maxFailures]) {
+        $oldestCountedFailure = find_nth_recent_failed_login($ipAddress, $scopeUsername, $windowStart, $maxFailures);
+        if ($oldestCountedFailure !== null) {
+            $unlockAt = $oldestCountedFailure->getTimestamp() + LOGIN_THROTTLE_WINDOW_SECONDS;
+            $remaining = max($remaining, $unlockAt - $now->getTimestamp());
+        }
+    }
+
+    return max(0, $remaining);
+}
+
 function attempt_admin_login(string $username, string $password): bool
 {
     $admin = $username === '' ? null : find_admin_by_username($username);

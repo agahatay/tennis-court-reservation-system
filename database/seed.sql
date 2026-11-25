@@ -21,12 +21,15 @@ INSERT INTO time_slots (time_slot_id, start_time, end_time) VALUES
     (10, '17:00', '18:00'), (11, '18:00', '19:00'), (12, '19:00', '20:00'),
     (13, '20:00', '21:00');
 
-INSERT INTO customers (customer_id, name, phone) VALUES
-    (1, 'Demo Customer One',   '0500 000 00 01'),
-    (2, 'Demo Customer Two',   '0500 000 00 02'),
-    (3, 'Demo Customer Three', '0500 000 00 03'),
-    (4, 'Demo Customer Four',  '0500 000 00 04'),
-    (5, 'Demo Customer Five',  '0500 000 00 05');
+-- Customers 4 and 6 share a phone number (e.g. two family members): they are
+-- separate customers because their names differ.
+INSERT INTO customers (customer_id, name, phone, phone_normalized) VALUES
+    (1, 'Demo Customer One',   '0500 000 00 01',    '+905000000001'),
+    (2, 'Demo Customer Two',   '+90 500 000 00 02', '+905000000002'),
+    (3, 'Demo Customer Three', '500 000 00 03',     '+905000000003'),
+    (4, 'Demo Customer Four',  '0500 000 00 04',    '+905000000004'),
+    (5, 'Demo Customer Five',  '0500-000-00-05',    '+905000000005'),
+    (6, 'Demo Customer Six',   '0500 000 00 04',    '+905000000004');
 
 INSERT INTO reservations (customer_id, court_id, time_slot_id, reservation_date, price, is_paid) VALUES
     -- past
@@ -43,4 +46,5 @@ INSERT INTO reservations (customer_id, court_id, time_slot_id, reservation_date,
     (4, 1, 3,  CURDATE() + INTERVAL 1 DAY, 3000.00, 1),
     (5, 5, 9,  CURDATE() + INTERVAL 2 DAY, 3000.00, 0),
     (1, 6, 10, CURDATE() + INTERVAL 3 DAY, 3000.00, 0),
+    (6, 2, 10, CURDATE() + INTERVAL 3 DAY, 3000.00, 1),
     (2, 1, 11, CURDATE() + INTERVAL 5 DAY, 3000.00, 0);

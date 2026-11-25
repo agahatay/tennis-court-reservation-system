@@ -15,9 +15,12 @@
 --   * reservations:  date -> reservation_date; adds time_slot_id (linked to
 --                    time_slots); ensures price DECIMAL(10,2) and is_paid exist;
 --                    NOT NULL columns; UNIQUE (court, date, slot); foreign keys
---   * courts/customers: NOT NULL names/phones; UNIQUE court names; phone index
+--   * courts:        NOT NULL, UNIQUE court names
+--   * customers:     NOT NULL name/phone; adds phone_normalized (E.164) for
+--                    matching "0532...", "532..." and "+90532..." as one number
 --   * admins:        new table for hashed administrator passwords
---   * customers.phone is deliberately NOT made unique (pending business review)
+--   * login_attempts: new table for login rate limiting
+--   * customers are NOT merged and phone numbers are NOT made unique
 --
 -- BEFORE RUNNING:
 --   1. Back up the database:
@@ -49,12 +52,42 @@ ALTER TABLE courts
     ADD UNIQUE KEY uq_courts_court_name (court_name);
 
 -- -----------------------------------------------------------------------------
--- 2. customers
+-- 2. customers: normalized phone numbers
 -- -----------------------------------------------------------------------------
+-- The original phone value is kept unchanged. phone_normalized holds the
+-- E.164 form used by the application for matching and search, computed with
+-- the same rules as normalize_phone() in src/validation.php:
+--   "+..."            -> "+" and the digits
+--   "00..."           -> "+" and the digits after "00"
+--   11 digits, "0..." -> "+90" and the last 10 digits   (0532 123 45 67)
+--   10 digits         -> "+90" and the digits           (532 123 45 67)
+--   12 digits, "90.." -> "+" and the digits             (90 532 123 45 67)
+-- Values that fit none of these rules are stored as bare digits (no "+"), so
+-- they can never match a number entered through the application. They are
+-- listed by 000-preflight-checks.sql.
+-- Customer records are NOT merged and phone numbers are NOT made unique.
 ALTER TABLE customers
     MODIFY name  VARCHAR(50) NOT NULL,
     MODIFY phone VARCHAR(20) NOT NULL,
-    ADD KEY idx_customers_phone (phone);
+    ADD COLUMN phone_normalized VARCHAR(20) NULL AFTER phone;
+
+-- Step 1: digits only (used as input for step 2).
+UPDATE customers SET phone_normalized = REGEXP_REPLACE(phone, '[^0-9]', '');
+
+-- Step 2: apply the normalization rules.
+UPDATE customers
+SET phone_normalized = CASE
+    WHEN TRIM(phone) LIKE '+%'                                          THEN CONCAT('+', phone_normalized)
+    WHEN phone_normalized LIKE '00%'                                    THEN CONCAT('+', SUBSTRING(phone_normalized, 3))
+    WHEN CHAR_LENGTH(phone_normalized) = 11 AND phone_normalized LIKE '0%'  THEN CONCAT('+90', SUBSTRING(phone_normalized, 2))
+    WHEN CHAR_LENGTH(phone_normalized) = 10 AND phone_normalized NOT LIKE '0%' THEN CONCAT('+90', phone_normalized)
+    WHEN CHAR_LENGTH(phone_normalized) = 12 AND phone_normalized LIKE '90%' THEN CONCAT('+', phone_normalized)
+    ELSE phone_normalized
+END;
+
+ALTER TABLE customers
+    MODIFY phone_normalized VARCHAR(20) NOT NULL,
+    ADD KEY idx_customers_phone_normalized_name (phone_normalized, name);
 
 -- -----------------------------------------------------------------------------
 -- 3. time_slots: structured start/end times
@@ -124,6 +157,16 @@ CREATE TABLE IF NOT EXISTS admins (
     last_login_at DATETIME     NULL,
     PRIMARY KEY (admin_id),
     UNIQUE KEY uq_admins_username (username)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS login_attempts (
+    login_attempt_id BIGINT      NOT NULL AUTO_INCREMENT,
+    ip_address       VARCHAR(45) NOT NULL,
+    username_hash    CHAR(64)    NOT NULL,
+    attempted_at     DATETIME    NOT NULL,
+    PRIMARY KEY (login_attempt_id),
+    KEY idx_login_attempts_ip_time (ip_address, attempted_at),
+    KEY idx_login_attempts_ip_user_time (ip_address, username_hash, attempted_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- -----------------------------------------------------------------------------
