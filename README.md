@@ -23,6 +23,7 @@ password-protected admin panel.
 - [Testing](#testing)
 - [Future improvements](#future-improvements)
 - [Author](#author)
+- [License](#license)
 
 ## Key features
 
@@ -237,3 +238,12 @@ Chrome and Edge, and what has **not** been tested yet, are in
 ## Author
 
 **Agah Atay Özbelli**: individually developed, independent software project.
+
+The first commit contains the original application as written by the author.
+The later refactoring, security hardening, tests and documentation were
+carried out with AI-assisted tooling (Claude Code); the commits made with it
+carry a `Co-Authored-By` trailer.
+
+## License
+
+Released under the [MIT License](LICENSE).
