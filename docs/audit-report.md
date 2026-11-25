@@ -6,10 +6,11 @@ Each finding links to the change that resolved it.
 
 ## Scope
 
-- 12 PHP/CSS files of the latest version, plus two older copies of the code
-  (an earlier snapshot and a deployed copy) that were found to diverge from it
+- 12 PHP/CSS files of the latest version, plus two older local copies of the
+  code (an earlier snapshot and a copy in a local web-server folder) that were
+  found to diverge from it
 - The phpMyAdmin dump of the `tennisdb` database
-- The features and security measures described in the original project report
+- The features and security measures listed in the original project documentation
 
 ## Feature verification
 
@@ -25,13 +26,13 @@ Each finding links to the change that resolved it.
 | Daily schedule | **Missing**: linked from three pages, file did not exist | Implemented (courts × time slots grid, colour-coded) |
 | Payment management | Implemented | Kept, sharing code with the reservations page |
 | Time-slot management | Existed but was unreachable and unused | Linked in the navigation and used by the booking page |
-| Foreign keys | Described in the report, **not present** in the database | Added |
+| Foreign keys | Listed in the documentation, **not present** in the database | Added |
 
 ## Security findings
 
 | # | Severity | Finding | Resolution |
 |---|---|---|---|
-| S1 | Critical | Admin password hardcoded in plain text (`$password == "..."`), single shared secret, no session regeneration | `admins` table with `password_hash()` / `password_verify()`, CLI account creation, `session_regenerate_id()` on login, idle timeout |
+| S1 | Critical | Admin password hardcoded in plain text (`$password == "..."`), single shared secret, no session regeneration, unlimited login attempts | `admins` table with `password_hash()` / `password_verify()`, CLI account creation, `session_regenerate_id()` on login, idle timeout, login rate limiting (5 failures per username and 20 per IP in 15 minutes) |
 | S2 | High | SQL injection in the delete endpoint (`$_GET['id']` concatenated into SQL) | All queries use prepared statements via `src/database.php` |
 | S3 | High | No CSRF protection; delete / payment / slot changes were GET links | POST-only actions with per-session CSRF tokens; logout is POST too |
 | S4 | High | Public `success.php?id=N` showed any customer's name and phone (enumerable) | Page removed; confirmation is a session flash message shown only to the person who booked |
@@ -50,8 +51,12 @@ not part of this repository.
   columns, so a fresh install from it could not work.
 - No foreign keys, every column nullable, no unique constraints.
 - Duplicate customers exist for the same phone number, including numbers that
-  differ only by formatting. `customers.phone` is **not** made unique yet; the
-  business rule needs review first (see `database/migrations/000-preflight-checks.sql`).
+  differ only by formatting (with and without a leading 0). Resolution: phone
+  numbers are now normalized to E.164 (`phone_normalized`), and a booking
+  reuses a customer only when the normalized number **and** the name match.
+  Records are not merged automatically and phone numbers are not unique,
+  because different people can share a number. `000-preflight-checks.sql`
+  lists existing duplicates for manual review.
 - The dump contained real-looking personal data, so it is not included in the
   repository. `database/seed.sql` uses fictional data.
 
