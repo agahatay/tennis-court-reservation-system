@@ -1,206 +1,144 @@
 <?php
-require __DIR__ . "/../src/database.php";
 
+declare(strict_types=1);
 
-$selectedCourt = isset($_GET['court_id']) ? (int)$_GET['court_id'] : 1;
-$selectedDate  = isset($_GET['date']) ? $_GET['date'] : date('Y-m-d');
+require dirname(__DIR__) . '/src/bootstrap.php';
 
+$now = now();
+$today = $now->format('Y-m-d');
 
-$timeSlots = [
-  "08:00-09:00","09:00-10:00","10:00-11:00","11:00-12:00",
-  "12:00-13:00","13:00-14:00","14:00-15:00","15:00-16:00",
-  "16:00-17:00","17:00-18:00","18:00-19:00","19:00-20:00",
-  "20:00-21:00"
-];
+$courts = get_all_courts();
+$timeSlots = get_all_time_slots();
 
-
-$courts = [];
-$cr = mysqli_query($conn, "SELECT court_id, court_name FROM courts ORDER BY court_id");
-while($row = mysqli_fetch_assoc($cr)){
-  $courts[] = $row;
-}
-if(count($courts) > 0 && $selectedCourt <= 0){
-  $selectedCourt = (int)$courts[0]['court_id'];
+// Selected court: the requested one if it exists, otherwise the first court.
+$requestedCourtId = request_int($_GET, 'court_id');
+$selectedCourt = $courts[0] ?? null;
+foreach ($courts as $court) {
+    if ((int) $court['court_id'] === $requestedCourtId) {
+        $selectedCourt = $court;
+    }
 }
 
-
-$bookedTimes = [];
-if(preg_match('/^\d{4}-\d{2}-\d{2}$/', $selectedDate)){
-  $stmt = mysqli_prepare($conn, "SELECT time FROM reservations WHERE court_id = ? AND date = ?");
-  mysqli_stmt_bind_param($stmt, "is", $selectedCourt, $selectedDate);
-  mysqli_stmt_execute($stmt);
-  $res = mysqli_stmt_get_result($stmt);
-  while($r = mysqli_fetch_assoc($res)){
-    $bookedTimes[] = $r['time'];
-  }
+// Selected date: must be a real date, today or later.
+$selectedDate = request_string($_GET, 'date', 10);
+if (parse_iso_date($selectedDate) === null || $selectedDate < $today) {
+    $selectedDate = $today;
 }
+
+$bookedSlotIds = $selectedCourt === null ? [] : get_booked_time_slot_ids((int) $selectedCourt['court_id'], $selectedDate);
+$hourlyRate = app_config()['hourly_rate'];
+
+$slotOptions = [];
+foreach ($timeSlots as $slot) {
+    $status = 'available';
+    if (in_array((int) $slot['time_slot_id'], $bookedSlotIds, true)) {
+        $status = 'booked';
+    } elseif (has_time_slot_started($selectedDate, $slot['start_time'], $now)) {
+        $status = 'passed';
+    }
+    $slotOptions[] = $slot + [
+        'status' => $status,
+        'price' => calculate_reservation_price($slot['start_time'], $slot['end_time'], $hourlyRate),
+    ];
+}
+$availableSlotCount = count(array_filter($slotOptions, static fn (array $slot): bool => $slot['status'] === 'available'));
+
+['old' => $oldInput, 'errors' => $errors] = pull_form_state();
+$generalErrors = array_intersect_key($errors, array_flip(['court_id', 'reservation_date']));
+
+$statusLabels = ['available' => 'Available', 'booked' => 'Booked', 'passed' => 'Passed'];
+
+render('header', ['title' => 'Book a Court', 'area' => 'public']);
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Tennis Court Reservation</title>
+<section class="card booking-card">
+    <header class="card-header">
+        <h1>Book a tennis court</h1>
+        <p class="muted">Choose a court and a date, then pick one of the available hours.</p>
+    </header>
 
-  <link rel="stylesheet" href="assets/css/style.css">
+    <?php if ($selectedCourt === null || $timeSlots === []): ?>
+        <div class="alert alert-info">Online booking is not available yet. Please check back later.</div>
+    <?php else: ?>
 
-  <style>
-    body { background:#f2f2f2; font-family: Arial, sans-serif; }
-    .container{
-      max-width: 520px;
-      margin: 40px auto;
-      background:#fff;
-      padding: 22px;
-      border-radius: 10px;
-      box-shadow: 0 10px 25px rgba(0,0,0,0.10);
-    }
-    h1 { color:#27ae60; margin: 0 0 10px; text-align:center; }
-    label { display:block; font-weight:700; margin-top:12px; }
-    input, select { width:100%; padding:10px; margin-top:6px; border:1px solid #ddd; border-radius:8px; }
-    button { width:100%; margin-top:16px; padding:12px; background:#27ae60; color:#fff; border:none; border-radius:8px; cursor:pointer; font-weight:700; }
-    button:disabled { opacity:0.6; cursor:not-allowed; }
-    hr { margin:18px 0; border:0; border-top:1px solid #eee; }
-    .hint { font-size:12px; opacity:0.85; margin-top:8px; text-align:center; }
-    .msg-success { background:#d4edda; color:#155724; padding:10px; border-radius:8px; margin:10px 0; font-weight:700; }
-    .msg-error { background:#f8d7da; color:#721c24; padding:10px; border-radius:8px; margin:10px 0; font-weight:700; }
-    .toplink { text-align:center; margin-top:12px; }
-    .toplink a{ color:#27ae60; text-decoration:none; font-weight:700; }
-  </style>
+    <form class="booking-filters" method="get" action="<?= e(url('index.php')) ?>" data-auto-submit>
+        <div class="field">
+            <label for="court_id">Court</label>
+            <select id="court_id" name="court_id">
+                <?php foreach ($courts as $court): ?>
+                    <option value="<?= (int) $court['court_id'] ?>"<?= $court === $selectedCourt ? ' selected' : '' ?>>
+                        <?= e($court['court_name']) ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <div class="field">
+            <label for="date">Date</label>
+            <input type="date" id="date" name="date" value="<?= e($selectedDate) ?>" min="<?= e($today) ?>" required>
+        </div>
+        <noscript><button type="submit" class="button button-secondary">Show available times</button></noscript>
+    </form>
 
-  <script>
-    function validateForm(){
-      const name  = document.querySelector("input[name='name']").value.trim();
-      const phone = document.querySelector("input[name='phone']").value.trim();
-      const price = document.querySelector("input[name='price']").value.trim();
-      const time  = document.querySelector("select[name='time']").value;
+    <?php if ($generalErrors !== []): ?>
+        <div class="alert alert-error" role="alert">
+            <?php foreach ($generalErrors as $message): ?><p><?= e($message) ?></p><?php endforeach; ?>
+        </div>
+    <?php endif; ?>
 
-      if(!name || !phone || !price || !time){
-        alert("Please fill in all fields.");
-        return false;
-      }
+    <form class="booking-form" method="post" action="<?= e(url('reserve.php')) ?>">
+        <?= csrf_field() ?>
+        <input type="hidden" name="court_id" value="<?= (int) $selectedCourt['court_id'] ?>">
+        <input type="hidden" name="reservation_date" value="<?= e($selectedDate) ?>">
 
-      const digits = phone.replace(/\D/g,'');
-      if(digits.length < 10){
-        alert("Phone number must be at least 10 digits.");
-        return false;
-      }
+        <fieldset class="slot-picker">
+            <legend>
+                Time slot
+                <span class="muted">· <?= e($selectedCourt['court_name']) ?>, <?= e(format_date($selectedDate)) ?></span>
+            </legend>
+            <div class="slot-grid">
+                <?php foreach ($slotOptions as $slot): ?>
+                    <?php $isAvailable = $slot['status'] === 'available'; ?>
+                    <label class="slot slot-<?= e($slot['status']) ?>">
+                        <input type="radio" name="time_slot_id" value="<?= (int) $slot['time_slot_id'] ?>" required
+                            <?= $isAvailable ? '' : ' disabled' ?>
+                            <?= $isAvailable && ($oldInput['time_slot_id'] ?? '') === (string) $slot['time_slot_id'] ? ' checked' : '' ?>>
+                        <span class="slot-time"><?= e(format_time_slot($slot)) ?></span>
+                        <span class="slot-status"><?= e($statusLabels[$slot['status']]) ?></span>
+                    </label>
+                <?php endforeach; ?>
+            </div>
+            <?php if (isset($errors['time_slot_id'])): ?>
+                <p class="field-error"><?= e($errors['time_slot_id']) ?></p>
+            <?php endif; ?>
+        </fieldset>
 
-      const p = parseFloat(price);
-      if(isNaN(p) || p < 0){
-        alert("Price must be a valid non-negative number.");
-        return false;
-      }
+        <?php if ($availableSlotCount === 0): ?>
+            <div class="alert alert-info">There are no available time slots for this court on this date. Please choose another date or court.</div>
+        <?php else: ?>
+            <div class="form-grid">
+                <div class="field">
+                    <label for="name">Full name</label>
+                    <input type="text" id="name" name="name" maxlength="<?= CUSTOMER_NAME_MAX_LENGTH ?>" autocomplete="name" required
+                           value="<?= e($oldInput['name'] ?? '') ?>"<?= isset($errors['name']) ? ' aria-invalid="true"' : '' ?>>
+                    <?php if (isset($errors['name'])): ?><p class="field-error"><?= e($errors['name']) ?></p><?php endif; ?>
+                </div>
+                <div class="field">
+                    <label for="phone">Phone number</label>
+                    <input type="tel" id="phone" name="phone" maxlength="20" autocomplete="tel" required data-phone-input
+                           placeholder="e.g. 0555 555 55 55"
+                           value="<?= e($oldInput['phone'] ?? '') ?>"<?= isset($errors['phone']) ? ' aria-invalid="true"' : '' ?>>
+                    <?php if (isset($errors['phone'])): ?><p class="field-error"><?= e($errors['phone']) ?></p><?php endif; ?>
+                </div>
+            </div>
 
-      return true;
-    }
-  </script>
-</head>
-
-<body>
-<div class="container">
-
-  <?php
-  
-  if(isset($_GET['invalid'])){
-    $msg = "INVALID";
-    if($_GET['invalid'] === "missing") $msg = "INVALID: Missing fields";
-    if($_GET['invalid'] === "booked")  $msg = "INVALID: Already booked";
-    if($_GET['invalid'] === "time")    $msg = "INVALID: Invalid time slot";
-    if($_GET['invalid'] === "db")      $msg = "INVALID: Database error";
-    echo '<div class="msg-error">'.htmlspecialchars($msg).'</div>';
-  }
-
-  
-  if(isset($_GET['success'])){
-    echo '<div class="msg-success">Reservation successfully created.</div>';
-  }
-  ?>
-
-  <h1>Tennis Court Reservation</h1>
-
-  <!-- 1) Court & Date Selection (GET) -->
-  <form method="GET">
-    <label>
-      Court
-      <select name="court_id" onchange="this.form.submit()">
-        <?php foreach($courts as $c): ?>
-          <?php
-            $cid = (int)$c['court_id'];
-            $sel = ($cid === $selectedCourt) ? "selected" : "";
-          ?>
-          <option value="<?php echo $cid; ?>" <?php echo $sel; ?>>
-            <?php echo htmlspecialchars($c['court_name']); ?>
-          </option>
-        <?php endforeach; ?>
-      </select>
-    </label>
-
-    <label>
-      Date
-      <input
-        type="date"
-        name="date"
-        value="<?php echo htmlspecialchars($selectedDate); ?>"
-        min="<?php echo date('Y-m-d'); ?>"
-        onchange="this.form.submit()"
-      >
-    </label>
-
-    <div class="hint">
-      Selecting court/date refreshes the page and hides already booked time slots.
-    </div>
-  </form>
-
-  <hr>
-
-  <!-- 2) Reservation Form (POST) -->
-  <form action="reserve.php" method="POST" onsubmit="return validateForm()" novalidate>
-    <input type="hidden" name="court_id" value="<?php echo (int)$selectedCourt; ?>">
-    <input type="hidden" name="date" value="<?php echo htmlspecialchars($selectedDate); ?>">
-
-    <label>
-      Name
-      <input type="text" name="name" placeholder="e.g. John Doe">
-    </label>
-
-    <label>
-      Phone
-      <input type="text" name="phone" placeholder="e.g. 0555 555 55 55">
-    </label>
-
-    <label>
-      Price
-      <input type="number" name="price" min="0" step="0.01" placeholder="e.g. 400">
-    </label>
-
-    <label>
-      Time Slot
-      <select name="time">
-        <?php
-        $availableCount = 0;
-        foreach($timeSlots as $slot){
-          if(!in_array($slot, $bookedTimes, true)){
-            $availableCount++;
-            echo "<option value='".htmlspecialchars($slot)."'>".htmlspecialchars($slot)."</option>";
-          }
-        }
-        if($availableCount === 0){
-          echo "<option value='' disabled selected>No available time slots</option>";
-        }
-        ?>
-      </select>
-    </label>
-
-    <button type="submit" <?php echo ($availableCount===0) ? "disabled" : ""; ?>>
-      Reserve
-    </button>
-
-    <div class="hint">All fields are required. Phone must have at least 10 digits.</div>
-  </form>
-
-  <div class="toplink">
-    <a href="admin/dashboard.php">View Admin Panel</a>
-  </div>
-
-</div>
-</body>
-</html>
+            <div class="booking-summary">
+                <p>
+                    Price: <strong><?= e(format_money($hourlyRate)) ?></strong> per hour.
+                    <span class="muted">The final price is calculated by the system from the selected slot.</span>
+                </p>
+                <button type="submit" class="button button-primary">Reserve</button>
+            </div>
+        <?php endif; ?>
+    </form>
+    <?php endif; ?>
+</section>
+<?php render('footer'); ?>

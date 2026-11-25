@@ -1,74 +1,63 @@
 <?php
-session_start();
 
-$error = "";
+declare(strict_types=1);
 
-if($_SERVER["REQUEST_METHOD"] == "POST"){
-  $password = $_POST['password'];
+require dirname(__DIR__, 2) . '/src/bootstrap.php';
 
-  if($password == "[REDACTED]"){   // ŞİFRE BURADA
-    $_SESSION['admin'] = true;
-    header("Location: reservations.php");
-    exit();
-  } else {
-    $error = "Wrong password!";
-  }
+if (current_admin() !== null) {
+    redirect('admin/dashboard.php');
 }
+
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
+    verify_csrf_token();
+
+    $username = request_string($_POST, 'username', 50);
+    $password = $_POST['password'] ?? '';
+
+    if (is_string($password) && attempt_admin_login($username, $password)) {
+        redirect('admin/dashboard.php');
+    }
+
+    // Same message for unknown users and wrong passwords.
+    remember_form_state(['username' => $username], []);
+    flash('error', 'Invalid username or password.');
+    redirect('admin/login.php');
+}
+
+['old' => $oldInput] = pull_form_state();
+$noAdminAccountExists = count_admins() === 0;
+
+render('header', ['title' => 'Admin Sign In', 'area' => 'admin']);
 ?>
+<section class="card auth-card">
+    <header class="card-header">
+        <h1>Admin sign in</h1>
+        <p class="muted">Manage reservations, schedules and payments.</p>
+    </header>
 
-<!DOCTYPE html>
-<html>
-<head>
-  <title>Admin Login</title>
-  <style>
-    body {
-      font-family: Arial;
-      background: #f2f2f2;
-      height: 100vh;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-    }
-    .box {
-      background: white;
-      padding: 25px;
-      border-radius: 8px;
-      box-shadow: 0 0 10px rgba(0,0,0,0.2);
-      text-align: center;
-      width: 300px;
-    }
-    input, button {
-      width: 100%;
-      padding: 8px;
-      margin-top: 10px;
-    }
-    button {
-      background: #27ae60;
-      color: white;
-      border: none;
-      cursor: pointer;
-    }
-    .error {
-      color: red;
-      margin-top: 10px;
-    }
-  </style>
-</head>
+    <?php if (isset($_GET['signed_out'])): ?>
+        <div class="alert alert-success" role="status">You have been signed out.</div>
+    <?php endif; ?>
 
-<body>
+    <?php if ($noAdminAccountExists): ?>
+        <div class="alert alert-info">
+            No administrator account exists yet. Create one from the project folder with
+            <code>php scripts/create-admin.php &lt;username&gt;</code>.
+        </div>
+    <?php endif; ?>
 
-<div class="box">
-  <h2>Admin Login</h2>
-
-  <form method="POST">
-    <input type="password" name="password" placeholder="Admin Password" required>
-    <button type="submit">Login</button>
-  </form>
-
-  <?php if($error != "") { ?>
-    <p class="error"><?= $error ?></p>
-  <?php } ?>
-</div>
-
-</body>
-</html>
+    <form method="post" action="<?= e(url('admin/login.php')) ?>" class="stack">
+        <?= csrf_field() ?>
+        <div class="field">
+            <label for="username">Username</label>
+            <input type="text" id="username" name="username" autocomplete="username" maxlength="50" required autofocus
+                   value="<?= e($oldInput['username'] ?? '') ?>">
+        </div>
+        <div class="field">
+            <label for="password">Password</label>
+            <input type="password" id="password" name="password" autocomplete="current-password" required>
+        </div>
+        <button type="submit" class="button button-primary button-block">Sign in</button>
+    </form>
+</section>
+<?php render('footer'); ?>
