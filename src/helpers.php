@@ -121,7 +121,7 @@ function handle_uncaught_exception(Throwable $exception): void
     }
     render('error', [
         'status' => 500,
-        'message' => 'Something went wrong on our side. Please try again later.',
+        'message' => 'An unexpected error occurred. Please try again later.',
         'details' => $showDetails ? (string) $exception : null,
     ]);
 }

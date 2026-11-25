@@ -14,13 +14,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Error <?= (int) $status ?> · Tennis Court Reservation</title>
+    <link rel="icon" href="<?= e(asset_url('images/favicon.svg')) ?>" type="image/svg+xml">
     <link rel="stylesheet" href="<?= e(asset_url('css/app.css')) ?>">
 </head>
 <body class="area-public">
 <main class="container page page-narrow">
     <section class="card">
         <p class="eyebrow">Error <?= (int) $status ?></p>
-        <h1>We could not complete your request</h1>
+        <h1>The request could not be completed</h1>
         <p><?= e($message) ?></p>
         <?php if (!empty($details)): ?>
             <pre class="error-details"><?= e($details) ?></pre>

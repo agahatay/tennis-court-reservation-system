@@ -21,15 +21,31 @@
         });
     });
 
-    // Phone numbers must contain 10 to 15 digits; show the browser's own
-    // validation message instead of submitting an invalid number.
+    // Basic phone check before submitting (the server applies the full rules).
     document.querySelectorAll('input[data-phone-input]').forEach(function (input) {
         function validatePhone() {
-            var digits = input.value.replace(/\D/g, '').length;
-            var valid = input.value === '' || (digits >= 10 && digits <= 15 && /^\+?[0-9 ().\-]+$/.test(input.value));
-            input.setCustomValidity(valid ? '' : 'Please enter a valid phone number (10–15 digits).');
+            var value = input.value.trim();
+            var digits = value.replace(/\D/g, '').length;
+            var valid = value === '' || (digits >= 10 && digits <= 15 && /^\+?[0-9 ().\-]+$/.test(value));
+            input.setCustomValidity(valid ? '' : 'Please enter a valid phone number, e.g. 0532 123 45 67.');
         }
         input.addEventListener('input', validatePhone);
         validatePhone();
     });
+
+    // Booking summary: show the chosen time slot and its price.
+    var summaryTime = document.querySelector('[data-summary-time]');
+    var summaryPrice = document.querySelector('[data-summary-price]');
+    function updateSummary() {
+        var selected = document.querySelector('input[name="time_slot_id"]:checked');
+        if (!selected || !summaryTime || !summaryPrice) {
+            return;
+        }
+        summaryTime.textContent = selected.getAttribute('data-label');
+        summaryPrice.textContent = selected.getAttribute('data-price');
+    }
+    document.querySelectorAll('input[name="time_slot_id"]').forEach(function (radio) {
+        radio.addEventListener('change', updateSummary);
+    });
+    updateSummary();
 })();

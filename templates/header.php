@@ -14,6 +14,7 @@ $signedInAdmin = $area === 'admin' ? current_admin() : null;
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title><?= e($title) ?> · Tennis Court Reservation</title>
+    <link rel="icon" href="<?= e(asset_url('images/favicon.svg')) ?>" type="image/svg+xml">
     <link rel="stylesheet" href="<?= e(asset_url('css/app.css')) ?>">
     <script src="<?= e(asset_url('js/app.js')) ?>" defer></script>
 </head>
