@@ -8,7 +8,7 @@ if($_SERVER["REQUEST_METHOD"] == "POST"){
 
   if($password == "[REDACTED]"){   // ŞİFRE BURADA
     $_SESSION['admin'] = true;
-    header("Location: list.php");
+    header("Location: reservations.php");
     exit();
   } else {
     $error = "Wrong password!";

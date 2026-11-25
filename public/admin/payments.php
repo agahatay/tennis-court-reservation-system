@@ -1,11 +1,11 @@
 <?php
 session_start();
 if(!isset($_SESSION['admin'])){
-  header("Location: admin_login.php");
+  header("Location: login.php");
   exit();
 }
 
-include "db.php";
+require __DIR__ . "/../../src/database.php";
 
 /* Hata görünsün (şimdilik açık kalsın, sonra kapatırız) */
 ini_set('display_errors', 1);
@@ -107,8 +107,8 @@ $totalRows = (int)($countRow['c'] ?? 0);
   <div class="topbar">
     <h2 style="margin:0;">Payments</h2>
     <div>
-      <a href="admin_dashboard.php">Dashboard</a>
-      <a href="list.php">Reservations</a>
+      <a href="dashboard.php">Dashboard</a>
+      <a href="reservations.php">Reservations</a>
       <a href="schedule.php">Daily Schedule</a>
       <a href="payments.php">Payments</a>
       <a href="logout.php">Logout</a>

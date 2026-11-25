@@ -1,0 +1,5 @@
+# Defence in depth for setups where the whole project folder sits inside the
+# web server's document root (e.g. XAMPP htdocs). Only public/ may be served;
+# configuration, source code, database files and logs are denied.
+# The recommended setup is to point the document root directly at public/.
+Require all denied

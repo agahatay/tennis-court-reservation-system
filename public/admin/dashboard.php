@@ -1,10 +1,10 @@
 <?php
 session_start();
 if(!isset($_SESSION['admin'])){
-  header("Location: admin_login.php");
+  header("Location: login.php");
   exit();
 }
-include "db.php";
+require __DIR__ . "/../../src/database.php";
 
 $today = date('Y-m-d');
 
@@ -84,7 +84,7 @@ $next5 = mysqli_query($conn,
   <div class="top">
     <h2 style="margin:0;">Admin Dashboard</h2>
     <div>
-      <a href="list.php">Reservations</a>
+      <a href="reservations.php">Reservations</a>
       <a href="schedule.php">Daily Schedule</a>
       <a href="payments.php">Payments</a>
       <a href="logout.php">Logout</a>

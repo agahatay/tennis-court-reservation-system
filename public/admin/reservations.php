@@ -1,10 +1,10 @@
 <?php
 session_start();
 if(!isset($_SESSION['admin'])){
-  header("Location: admin_login.php");
+  header("Location: login.php");
   exit();
 }
-include "db.php";
+require __DIR__ . "/../../src/database.php";
 
 
 if(isset($_GET['toggle_paid'])){
@@ -23,7 +23,7 @@ if(isset($_GET['toggle_paid'])){
   $q = urlencode($_GET['q'] ?? '');
   $d = urlencode($_GET['date'] ?? '');
   $u = urlencode($_GET['unpaid'] ?? '');
-  header("Location: list.php?q=$q&date=$d&unpaid=$u");
+  header("Location: reservations.php?q=$q&date=$d&unpaid=$u");
   exit();
 }
 
@@ -107,7 +107,7 @@ $result = mysqli_query($conn,
   <div class="topbar">
     <h2 style="margin:0;">Admin Panel - Reservations</h2>
     <div>
-      <a href="admin_dashboard.php">Dashboard</a>
+      <a href="dashboard.php">Dashboard</a>
       <a href="schedule.php">Daily Schedule</a>
       <a href="payments.php">Payments</a>
       <a href="logout.php">Logout</a>
@@ -124,7 +124,7 @@ $result = mysqli_query($conn,
     </label>
 
     <button type="submit">Apply</button>
-    <a href="list.php">Clear</a>
+    <a href="reservations.php">Clear</a>
   </form>
 
   <table>
@@ -166,7 +166,7 @@ $result = mysqli_query($conn,
           ?>
 
           <a class="togglePaid"
-             href="list.php?toggle_paid=<?php echo $rid; ?>&v=<?php echo $nextVal; ?>&q=<?php echo urlencode($q); ?>&date=<?php echo urlencode($filterDate); ?>&unpaid=<?php echo $onlyUnpaid ? '1' : ''; ?>"
+             href="reservations.php?toggle_paid=<?php echo $rid; ?>&v=<?php echo $nextVal; ?>&q=<?php echo urlencode($q); ?>&date=<?php echo urlencode($filterDate); ?>&unpaid=<?php echo $onlyUnpaid ? '1' : ''; ?>"
              onclick="return confirm('<?php echo $confirmText; ?>')">
              <?php echo $btnText; ?>
           </a>
@@ -174,7 +174,7 @@ $result = mysqli_query($conn,
           &nbsp;|&nbsp;
 
           <a class="delete"
-             href="delete.php?id=<?php echo $rid; ?>"
+             href="delete-reservation.php?id=<?php echo $rid; ?>"
              onclick="return confirm('Delete this reservation?')">
              Delete
           </a>
@@ -184,7 +184,7 @@ $result = mysqli_query($conn,
   </table>
 
   <div style="margin-top:14px; text-align:center;">
-    <a href="index.php" style="text-decoration:none; font-weight:bold; color:#27ae60;">← Back to Reservation Page</a>
+    <a href="../index.php" style="text-decoration:none; font-weight:bold; color:#27ae60;">← Back to Reservation Page</a>
   </div>
 
 </div>

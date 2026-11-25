@@ -1,10 +1,10 @@
 <?php
 session_start();
 if(!isset($_SESSION['admin'])){
-  header("Location: admin_login.php");
+  header("Location: login.php");
   exit();
 }
-include "db.php";
+require __DIR__ . "/../../src/database.php";
 
 /* Add slot */
 if(isset($_POST['add'])){
@@ -15,7 +15,7 @@ if(isset($_POST['add'])){
     $labelSafe = mysqli_real_escape_string($conn, $label);
     mysqli_query($conn, "INSERT INTO time_slots(slot_label, sort_order) VALUES('$labelSafe', $order)");
   }
-  header("Location: time_slots_admin.php");
+  header("Location: time-slots.php");
   exit();
 }
 
@@ -23,7 +23,7 @@ if(isset($_POST['add'])){
 if(isset($_GET['delete'])){
   $id = (int)$_GET['delete'];
   mysqli_query($conn, "DELETE FROM time_slots WHERE slot_id = $id");
-  header("Location: time_slots_admin.php");
+  header("Location: time-slots.php");
   exit();
 }
 
@@ -54,8 +54,8 @@ $slots = mysqli_query($conn, "SELECT * FROM time_slots ORDER BY sort_order");
   <div class="top">
     <h2 style="margin:0;">Time Slots Management</h2>
     <div>
-      <a href="admin_dashboard.php">Dashboard</a>
-      <a href="list.php">Reservations</a>
+      <a href="dashboard.php">Dashboard</a>
+      <a href="reservations.php">Reservations</a>
       <a href="logout.php">Logout</a>
     </div>
   </div>
@@ -80,7 +80,7 @@ $slots = mysqli_query($conn, "SELECT * FROM time_slots ORDER BY sort_order");
         <td><?php echo (int)$s['sort_order']; ?></td>
         <td><?php echo htmlspecialchars($s['slot_label']); ?></td>
         <td>
-          <a class="del" href="time_slots_admin.php?delete=<?php echo (int)$s['slot_id']; ?>"
+          <a class="del" href="time-slots.php?delete=<?php echo (int)$s['slot_id']; ?>"
              onclick="return confirm('Delete this slot?')">Delete</a>
         </td>
       </tr>

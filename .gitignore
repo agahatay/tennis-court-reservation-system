@@ -1,1 +1,28 @@
+# Local configuration and secrets
 .env
+.env.*
+!.env.example
+
+# Runtime files
+storage/logs/*
+!storage/logs/.gitkeep
+
+# Database dumps may contain personal data; only the curated files in database/ are tracked
+*.sql
+!database/*.sql
+!database/migrations/*.sql
+*.sql.gz
+
+# Private reference material (kept out of the public repository)
+private/
+*.docx
+*.doc
+*.pdf
+
+# OS / editor files
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+*.swp

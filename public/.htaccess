@@ -1,0 +1,4 @@
+# The public web root: overrides the "deny all" rule in the project root.
+Require all granted
+Options -Indexes
+DirectoryIndex index.php

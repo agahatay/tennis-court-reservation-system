@@ -1,5 +1,5 @@
 <?php
-include "db.php";
+require __DIR__ . "/../src/database.php";
 
 $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 
@@ -25,7 +25,7 @@ if($id > 0){
 <head>
   <meta charset="UTF-8">
   <title>Successful</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="assets/css/style.css">
   <style>
     h2 { color:#27ae60; margin-bottom:10px; }
     .box { text-align:left; font-size:14px; line-height:1.8; }
@@ -51,7 +51,7 @@ if($id > 0){
     <?php } ?>
 
     <a href="index.php">← Make another reservation</a><br>
-    <a href="admin_login.php">Admin Panel</a>
+    <a href="admin/login.php">Admin Panel</a>
   </div>
 </body>
 </html>

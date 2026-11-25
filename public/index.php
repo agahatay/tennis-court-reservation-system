@@ -1,5 +1,5 @@
 <?php
-include "db.php";
+require __DIR__ . "/../src/database.php";
 
 
 $selectedCourt = isset($_GET['court_id']) ? (int)$_GET['court_id'] : 1;
@@ -41,7 +41,7 @@ if(preg_match('/^\d{4}-\d{2}-\d{2}$/', $selectedDate)){
   <meta charset="UTF-8">
   <title>Tennis Court Reservation</title>
 
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="assets/css/style.css">
 
   <style>
     body { background:#f2f2f2; font-family: Arial, sans-serif; }
@@ -198,7 +198,7 @@ if(preg_match('/^\d{4}-\d{2}-\d{2}$/', $selectedDate)){
   </form>
 
   <div class="toplink">
-    <a href="list.php">View Admin Panel</a>
+    <a href="admin/dashboard.php">View Admin Panel</a>
   </div>
 
 </div>
