@@ -33,14 +33,19 @@ lacks(){ if printf '%s' "$2" | grep -q -- "$3"; then bad "$1" "unexpected [$3]";
 token(){ grep -o 'name="csrf_token" value="[0-9a-f]*"' | head -1 | sed 's/.*value="//;s/"//'; }
 code(){ curl -s -o /dev/null -w '%{http_code}' "$@"; }
 loc(){ curl -s -o /dev/null -w '%{redirect_url}' "$@"; }
+blocked(){ local c; c=$(code "$2"); if [ "$c" = 403 ] || [ "$c" = 404 ]; then ok "$1"; else bad "$1" "expected 403/404 got [$c]"; fi; }
 
 PJ=$(mktemp); AJ=$(mktemp)   # public / admin cookie jars
 TOMORROW=$(date -d tomorrow +%F); YESTERDAY=$(date -d yesterday +%F)
+$M "DELETE FROM login_attempts"   # start without rate-limit history from earlier runs
 
 echo "== Public booking page"
 H=$(curl -s -c $PJ -b $PJ "$B/?court_id=2&date=$TOMORROW")
 check "index returns 200" "$(code "$B/")" 200
-contains "court list rendered (7 courts)" "$(printf '%s' "$H" | grep -c '<option value=')" 7
+check "court options rendered (7 courts)" "$(printf '%s' "$H" | grep -c 'option-title">Court')" 7
+check "7 date shortcuts rendered" "$(printf '%s' "$H" | grep -c 'option option-compact')" 7
+contains "selected court marked" "$H" 'aria-current="true"'
+contains "free hours shown per court" "$H" 'hours free'
 contains "slots rendered from DB" "$H" '08:00 – 09:00'
 lacks "no customer-editable price field" "$H" 'name="price"'
 contains "CSP header sent" "$(curl -s -D - -o /dev/null $B/)" "Content-Security-Policy"
@@ -167,15 +172,74 @@ contains "slot with reservations cannot be deleted" "$F" 'cannot be deleted'
 F=$(curl -s -L -b $AJ -c $AJ --data-urlencode "csrf_token=$T" -d "time_slot_id=$NEWSLOT" "$B/admin/actions/delete-time-slot.php")
 contains "unused slot deleted" "$F" 'was deleted'
 
+echo "== Phone normalization and customer matching"
+# book <court> <date> <slot id> <name> <phone>: prints the confirmation / error page
+book(){ local t; t=$(curl -s -c $PJ -b $PJ "$B/" | token)
+  curl -s -L -c $PJ -b $PJ --data-urlencode "csrf_token=$t" -d "court_id=$1&reservation_date=$2&time_slot_id=$3" \
+       --data-urlencode "name=$4" --data-urlencode "phone=$5" "$B/reserve.php"; }
+D5=$(date -d '+5 day' +%F)
+CUSTOMERS_BEFORE=$($M "SELECT COUNT(*) FROM customers")
+contains "booking with +90 format of an existing number" "$(book 3 $D5 1 'Demo Customer One' '+90 500 000 00 01')" 'confirmed'
+check "same name + equivalent phone reuses the customer" "$($M "SELECT customer_id FROM reservations WHERE court_id=3 AND reservation_date='$D5' AND time_slot_id=1")" 1
+contains "booking with national format without leading 0" "$(book 3 $D5 2 'demo customer one' '500 000 00 01')" 'confirmed'
+check "name match ignores letter case" "$($M "SELECT customer_id FROM reservations WHERE court_id=3 AND reservation_date='$D5' AND time_slot_id=2")" 1
+check "no customer records created so far" "$($M "SELECT COUNT(*) FROM customers")" "$CUSTOMERS_BEFORE"
+contains "different person sharing the phone can book" "$(book 3 $D5 3 'Shared Phone Person' '0500-000-00-01')" 'confirmed'
+check "different name on same phone creates a separate customer" "$($M "SELECT COUNT(*) FROM customers")" "$((CUSTOMERS_BEFORE + 1))"
+check "new customer stored with normalized phone" "$($M "SELECT phone_normalized FROM customers WHERE name='Shared Phone Person'")" '+905000000001'
+check "phone kept as entered for display" "$($M "SELECT phone FROM customers WHERE name='Shared Phone Person'")" '0500-000-00-01'
+check "existing records were not merged" "$($M "SELECT COUNT(*) FROM customers WHERE phone_normalized='+905000000001'")" 2
+contains "incomplete Turkish number rejected" "$(book 3 $D5 4 'Someone' '0532 123 45 6')" 'valid phone number'
+check "admin search by phone in another format" "$(curl -s -b $AJ "$B/admin/reservations.php?search=%2B90%20500%20000%2000%2001" | grep -c 'data-label="Date"')" "$($M "SELECT COUNT(*) FROM reservations JOIN customers USING(customer_id) WHERE phone_normalized='+905000000001'")"
+
 echo "== Logout"
 T=$(curl -s -b $AJ "$B/admin/dashboard.php" | token)
 check "GET logout rejected (405)" "$(code -b $AJ "$B/admin/logout.php")" 405
 check "logout redirects to login" "$(loc -b $AJ -c $AJ --data-urlencode "csrf_token=$T" "$B/admin/logout.php")" "$B/admin/login.php?signed_out=1"
 check "after logout, dashboard redirects" "$(code -b $AJ "$B/admin/dashboard.php")" 303
 
+echo "== Login rate limiting"
+RJ=$(mktemp)
+# login <user> <password>: prints "<status> <redirect>" for one attempt with a fresh token
+login(){ local t; t=$(curl -s -c $RJ -b $RJ "$B/admin/login.php" | token)
+  curl -s -c $RJ -b $RJ -o /dev/null -w '%{http_code} %{redirect_url}' --data-urlencode "csrf_token=$t" \
+       --data-urlencode "username=$1" --data-urlencode "password=$2" "$B/admin/login.php"; }
+$M "DELETE FROM login_attempts"
+for i in 1 2 3 4 5; do login "$ADMIN_USER" "wrong-password-$i" >/dev/null; done
+check "5 failures recorded" "$($M "SELECT COUNT(*) FROM login_attempts")" 5
+check "usernames stored only as SHA-256 hashes" "$($M "SELECT COUNT(*) FROM login_attempts WHERE username_hash = SHA2(LOWER('$ADMIN_USER'), 256)")" 5
+R=$(login "$ADMIN_USER" "$ADMIN_PASSWORD")
+check "6th attempt refused with 429 even with the correct password" "${R%% *}" 429
+T=$(curl -s -c $RJ -b $RJ "$B/admin/login.php" | token)
+contains "lockout message shown" "$(curl -s -c $RJ -b $RJ --data-urlencode "csrf_token=$T" --data-urlencode "username=$ADMIN_USER" -d "password=x" "$B/admin/login.php")" 'Too many failed sign-in attempts'
+check "refused attempts are not counted again" "$($M "SELECT COUNT(*) FROM login_attempts")" 5
+check "still locked out of the dashboard" "$(code -b $RJ "$B/admin/dashboard.php")" 303
+R=$(login "other-user-$RANDOM" "whatever-password")
+check "other usernames from the same IP are not locked by the per-user limit" "${R%% *}" 303
+$M "UPDATE login_attempts SET attempted_at = attempted_at - INTERVAL 16 MINUTE"
+R=$(login "$ADMIN_USER" "$ADMIN_PASSWORD")
+check "lock expires after the 15-minute window" "${R#* }" "$B/admin/dashboard.php"
+check "successful login clears that user's failures" "$($M "SELECT COUNT(*) FROM login_attempts WHERE username_hash = SHA2(LOWER('$ADMIN_USER'), 256)")" 0
+$M "DELETE FROM login_attempts"
+RJ=$(mktemp)   # fresh session: the previous step signed in, and signed-in users are redirected away from the login form
+for i in $(seq 1 20); do login "probe-$i" "wrong" >/dev/null; done
+check "per-IP: 20 failures across different usernames recorded" "$($M "SELECT COUNT(*) FROM login_attempts")" 20
+R=$(login "fresh-user" "wrong")
+check "per-IP limit: 21st failure in the window is refused (429)" "${R%% *}" 429
+$M "DELETE FROM login_attempts"
+
 echo "== Files outside public/ are not served"
-for f in .env src/config.php database/schema.sql; do check "/../$f not reachable" "$(code "$B/../$f")" 404; done
+for f in .env src/config.php database/schema.sql; do blocked "/../$f not reachable" "$B/../$f"; done
 check "removed success.php is gone (PII leak)" "$(code "$B/success.php?id=1")" 404
+# When the whole project folder is served (e.g. copied into XAMPP htdocs), set
+# PROJECT_ROOT_URL to its URL to verify the .htaccess deny rules.
+if [ -n "${PROJECT_ROOT_URL:-}" ]; then
+  for f in "" .env .env.example .htaccess src/config.php database/schema.sql scripts/create-admin.php \
+           storage/logs/ templates/header.php tests/unit-tests.php .git/config private/ docs/; do
+    blocked "project root: /$f denied" "$PROJECT_ROOT_URL/$f"
+  done
+  for d in assets/ assets/css/ admin/actions/; do blocked "directory listing disabled: public/$d" "$B/$d"; done
+fi
 
 echo; echo "RESULT: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]
