@@ -237,7 +237,7 @@ Chrome and Edge, and what has **not** been tested yet, are in
 
 ## Author
 
-**Agah Atay Özbelli**: individually developed, independent software project.
+**Agah Atay Özbelli**: independent software project.
 
 The first commit contains the original application as written by the author.
 The later refactoring, security hardening, tests and documentation were
